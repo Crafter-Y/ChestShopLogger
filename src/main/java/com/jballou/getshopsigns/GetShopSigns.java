@@ -1,11 +1,11 @@
-package net.fabricmc.example;
+package com.jballou.getshopsigns;
 
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.PrimitiveIterator;
 
-//import net.fabricmc.example.ext.SignBlockEntityExt;
-import net.fabricmc.example.mixin.SignBlockEntityAccessor;
+//import com.jballou.getshopsigns.ext.SignBlockEntityExt;
+import com.jballou.getshopsigns.mixin.SignBlockEntityAccessor;
 import net.fabricmc.api.*;
 import net.fabricmc.fabric.api.client.rendering.v1.*;
 import net.minecraft.block.*;
@@ -19,8 +19,8 @@ import net.minecraft.entity.projectile.*;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.SignItem;
 import net.minecraft.text.*;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.tileentity.SignTileEntity;
+//import net.minecraft.tileentity.TileEntity;
+//import net.minecraft.tileentity.SignTileEntity;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
@@ -29,13 +29,13 @@ import net.minecraft.world.*;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
-public class ExampleMod implements ClientModInitializer {
+public class GetShopSigns implements ClientModInitializer {
 	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
 //	private static final HashSet<SignBlockEntity> signs = new HashSet<>();
 //	private static String searchText = "";
 	@Override
 	public void onInitializeClient() {
-		HudRenderCallback.EVENT.register(ExampleMod::displayBoundingBox);
+		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
 	}
 	private static long lastCalculationTime = 0;
 	private static boolean lastCalculationExists = false;
@@ -60,18 +60,18 @@ public class ExampleMod implements ClientModInitializer {
 		Vec3d cameraDirection = client.cameraEntity.getRotationVec(tickDelta);
 		double fov = client.options.fov;
 		double angleSize = fov/height;
-		Vector3f verticalRotationAxis = new Vector3f(cameraDirection);
-		verticalRotationAxis.cross(Vector3f.POSITIVE_Y);
+		Vec3f verticalRotationAxis = new Vec3f(cameraDirection);
+		verticalRotationAxis.cross(Vec3f.POSITIVE_Y);
 		if(!verticalRotationAxis.normalize()) {
 			lastCalculationExists = false;
 			return;
 		}
 
-		Vector3f horizontalRotationAxis = new Vector3f(cameraDirection);
+		Vec3f horizontalRotationAxis = new Vec3f(cameraDirection);
 		horizontalRotationAxis.cross(verticalRotationAxis);
 		horizontalRotationAxis.normalize();
 
-		verticalRotationAxis = new Vector3f(cameraDirection);
+		verticalRotationAxis = new Vec3f(cameraDirection);
 		verticalRotationAxis.cross(horizontalRotationAxis);
 
 		HitResult hit = client.crosshairTarget;
@@ -102,7 +102,7 @@ public class ExampleMod implements ClientModInitializer {
 						width,
 						height
 				);
-				HitResult nextHit = rayTraceInDirection(client, tickDelta, direction);//TODO make less expensive
+				HitResult nextHit = raycastInDirection(client, tickDelta, direction);//TODO make less expensive
 
 				if(nextHit == null) {
 					continue;
@@ -149,17 +149,23 @@ public class ExampleMod implements ClientModInitializer {
 			if (blockEntity instanceof SignBlockEntity) {
 				try {
 //					Entity entitySign = ((EntityHitResult) hit).getEntity();
-					TileEntity tileEntity = event.getWorld().getTileEntity(blockPos);
-        	        		SignTileEntity signTileEntity = (SignTileEntity) tileEntity;
+//					TileEntity tileEntity = event.getWorld().getTileEntity(blockPos);
+//        	        		SignTileEntity signTileEntity = (SignTileEntity) tileEntity;
 					StringBuilder signText = new StringBuilder();
-
-					for (Text line : signTileEntity.lines) {
+					SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
+					for (int i=0; i<4; i++) {
+						signText.append(signBlockEntity.getTextOnRow(i).asString());
+						signText.append("\n");
+					}
+/*
+					for (Text line : signBlockEntity.texts) {
 						line.visit((part) -> {
 							signText.append(part);
 							return Optional.empty();
 						});
-						signText.append(" ");
 					}
+*/
+					LOGGER.info(signText);
 
 		        	        client.player.sendMessage(new LiteralText("sign: " + signText.toString()).formatted(Formatting.AQUA), true);
 				}
@@ -212,25 +218,25 @@ public class ExampleMod implements ClientModInitializer {
 		return block.getName();
 	}
 
-	private static Vec3d map(float anglePerPixel, Vec3d center, Vector3f horizontalRotationAxis,
-							 Vector3f verticalRotationAxis, int x, int y, int width, int height) {
+	private static Vec3d map(float anglePerPixel, Vec3d center, Vec3f horizontalRotationAxis,
+							 Vec3f verticalRotationAxis, int x, int y, int width, int height) {
 		float horizontalRotation = (x - width/2f) * anglePerPixel;
 		float verticalRotation = (y - height/2f) * anglePerPixel;
 
-		final Vector3f temp2 = new Vector3f(center);
+		final Vec3f temp2 = new Vec3f(center);
 		temp2.rotate(verticalRotationAxis.getDegreesQuaternion(verticalRotation));
 		temp2.rotate(horizontalRotationAxis.getDegreesQuaternion(horizontalRotation));
 		return new Vec3d(temp2);
 	}
 
-	private static HitResult rayTraceInDirection(MinecraftClient client, float tickDelta, Vec3d direction) {
+	private static HitResult raycastInDirection(MinecraftClient client, float tickDelta, Vec3d direction) {
 		Entity entity = client.getCameraEntity();
 		if (entity == null || client.world == null) {
 			return null;
 		}
 
 		double reachDistance = 5.0F;
-		HitResult target = rayTrace(entity, reachDistance, tickDelta, false, direction);
+		HitResult target = raycast(entity, reachDistance, tickDelta, false, direction);
 		boolean tooFar = false;
 		double extendedReach = 6.0D;
 		reachDistance = extendedReach;
@@ -247,7 +253,7 @@ public class ExampleMod implements ClientModInitializer {
 				.getBoundingBox()
 				.stretch(entity.getRotationVec(1.0F).multiply(reachDistance))
 				.expand(1.0D, 1.0D, 1.0D);
-		EntityHitResult entityHitResult = ProjectileUtil.rayTrace(
+		EntityHitResult entityHitResult = ProjectileUtil.raycast(
 				entity,
 				cameraPos,
 				vec3d3,
@@ -272,7 +278,7 @@ public class ExampleMod implements ClientModInitializer {
 		return target;
 	}
 
-	private static HitResult rayTrace(
+	private static HitResult raycast(
 			Entity entity,
 			double maxDistance,
 			float tickDelta,
@@ -280,11 +286,11 @@ public class ExampleMod implements ClientModInitializer {
 			Vec3d direction
 	) {
 		Vec3d end = entity.getCameraPosVec(tickDelta).add(direction.multiply(maxDistance));
-		return entity.world.rayTrace(new RayTraceContext(
+		return entity.world.raycast(new RaycastContext(
 				entity.getCameraPosVec(tickDelta),
 				end,
-				RayTraceContext.ShapeType.OUTLINE,
-				includeFluids ? RayTraceContext.FluidHandling.ANY : RayTraceContext.FluidHandling.NONE,
+				RaycastContext.ShapeType.OUTLINE,
+				includeFluids ? RaycastContext.FluidHandling.ANY : RaycastContext.FluidHandling.NONE,
 				entity
 		));
 	}

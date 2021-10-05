@@ -1,4 +1,4 @@
-package net.fabricmc.example.mixin;
+package com.jballou.getshopsigns.mixin;
 
 import net.minecraft.block.entity.SignBlockEntity;
 import net.minecraft.text.Text;
@@ -9,5 +9,5 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface SignBlockEntityAccessor {
 
     @Accessor
-    Text[] getText();
+    Text[] getTexts();
 }

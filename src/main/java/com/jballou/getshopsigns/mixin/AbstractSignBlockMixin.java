@@ -1,4 +1,4 @@
-package net.fabricmc.example.mixin;
+package com.jballou.getshopsigns.mixin;
 
 import net.minecraft.block.AbstractSignBlock;
 import net.minecraft.block.BlockState;
@@ -30,7 +30,7 @@ public class AbstractSignBlockMixin {
                 SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
 
                 // Using an accessor here to get the lines, didn't want to hardcode the number of lines for possible mod compat
-                Text[] lines = ((SignBlockEntityAccessor)signBlockEntity).getText();
+                Text[] lines = ((SignBlockEntityAccessor)signBlockEntity).getTexts();
 
                 StringBuilder textToCopy = new StringBuilder();
 
