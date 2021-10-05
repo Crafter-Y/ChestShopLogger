@@ -16,7 +16,11 @@ import net.minecraft.client.util.math.*;
 import net.minecraft.entity.*;
 import net.minecraft.entity.decoration.*;
 import net.minecraft.entity.projectile.*;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.SignItem;
 import net.minecraft.text.*;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.tileentity.SignTileEntity;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
@@ -145,11 +149,11 @@ public class ExampleMod implements ClientModInitializer {
 			if (blockEntity instanceof SignBlockEntity) {
 				try {
 //					Entity entitySign = ((EntityHitResult) hit).getEntity();
-        	        		SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
+					TileEntity tileEntity = event.getWorld().getTileEntity(blockPos);
+        	        		SignTileEntity signTileEntity = (SignTileEntity) tileEntity;
 					StringBuilder signText = new StringBuilder();
-			                Text[] lines = ((SignBlockEntityAccessor)signBlockEntity).getText();
 
-					for (Text line : lines) {
+					for (Text line : signTileEntity.lines) {
 						line.visit((part) -> {
 							signText.append(part);
 							return Optional.empty();
