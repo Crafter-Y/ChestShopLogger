@@ -1,8 +1,15 @@
 package net.fabricmc.example;
 
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.PrimitiveIterator;
+
+//import net.fabricmc.example.ext.SignBlockEntityExt;
+import net.fabricmc.example.mixin.SignBlockEntityAccessor;
 import net.fabricmc.api.*;
 import net.fabricmc.fabric.api.client.rendering.v1.*;
 import net.minecraft.block.*;
+import net.minecraft.block.entity.*;
 import net.minecraft.client.*;
 import net.minecraft.client.gui.*;
 import net.minecraft.client.util.math.*;
@@ -10,16 +17,22 @@ import net.minecraft.entity.*;
 import net.minecraft.entity.decoration.*;
 import net.minecraft.entity.projectile.*;
 import net.minecraft.text.*;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
 import net.minecraft.world.*;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 public class ExampleMod implements ClientModInitializer {
+	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
+//	private static final HashSet<SignBlockEntity> signs = new HashSet<>();
+//	private static String searchText = "";
 	@Override
 	public void onInitializeClient() {
 		HudRenderCallback.EVENT.register(ExampleMod::displayBoundingBox);
 	}
-
 	private static long lastCalculationTime = 0;
 	private static boolean lastCalculationExists = false;
 	private static int lastCalculationMinX = 0;
@@ -124,6 +137,36 @@ public class ExampleMod implements ClientModInitializer {
 		lastCalculationHeight = maxY - minY;
 
 		drawHollowFill(matrixStack, minX, minY, maxX - minX, maxY - minY, 2, 0xffff0000);
+		if (hit.getType() == HitResult.Type.BLOCK) {
+			BlockPos blockPos = ((BlockHitResult) hit).getBlockPos();
+			BlockState blockState = MinecraftClient.getInstance().world.getBlockState(blockPos);
+			BlockEntity blockEntity = MinecraftClient.getInstance().world.getBlockEntity(blockPos);
+			Block block = blockState.getBlock();
+			if (blockEntity instanceof SignBlockEntity) {
+				try {
+//					Entity entitySign = ((EntityHitResult) hit).getEntity();
+        	        		SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
+					StringBuilder signText = new StringBuilder();
+			                Text[] lines = ((SignBlockEntityAccessor)signBlockEntity).getText();
+
+					for (Text line : lines) {
+						line.visit((part) -> {
+							signText.append(part);
+							return Optional.empty();
+						});
+						signText.append(" ");
+					}
+
+		        	        client.player.sendMessage(new LiteralText("sign: " + signText.toString()).formatted(Formatting.AQUA), true);
+				}
+				catch (Exception e) {
+					LOGGER.error(e);
+	        	        	client.player.sendMessage(new LiteralText("OOPS! " + e.toString()).formatted(Formatting.AQUA), true);
+				}
+				return;
+			}
+		}
+
 		LiteralText text = new LiteralText("Bounding " + minX + " " + minY + " " + width + " " + height + ": ");
 		client.player.sendMessage(text.append(getLabel(hit)), true);
 	}
