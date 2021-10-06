@@ -1,11 +1,7 @@
 package com.jballou.getshopsigns;
 
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.PrimitiveIterator;
+import java.util.*;
 
-//import com.jballou.getshopsigns.ext.SignBlockEntityExt;
-import com.jballou.getshopsigns.mixin.SignBlockEntityAccessor;
 import net.fabricmc.api.*;
 import net.fabricmc.fabric.api.client.rendering.v1.*;
 import net.minecraft.block.*;
@@ -16,11 +12,7 @@ import net.minecraft.client.util.math.*;
 import net.minecraft.entity.*;
 import net.minecraft.entity.decoration.*;
 import net.minecraft.entity.projectile.*;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.SignItem;
 import net.minecraft.text.*;
-//import net.minecraft.tileentity.TileEntity;
-//import net.minecraft.tileentity.SignTileEntity;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
@@ -31,8 +23,7 @@ import org.apache.logging.log4j.LogManager;
 
 public class GetShopSigns implements ClientModInitializer {
 	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
-//	private static final HashSet<SignBlockEntity> signs = new HashSet<>();
-//	private static String searchText = "";
+	public static Hashtable<String, ShopSign> shopSigns = new Hashtable<String, ShopSign>();
 	@Override
 	public void onInitializeClient() {
 		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
@@ -43,6 +34,25 @@ public class GetShopSigns implements ClientModInitializer {
 	private static int lastCalculationMinY = 0;
 	private static int lastCalculationWidth = 0;
 	private static int lastCalculationHeight = 0;
+
+	public static void parseSign(BlockPos blockPos, SignBlockEntity signBlockEntity) {
+		String blockCoords = new String(blockPos.getX() + "_" + blockPos.getY() + "_" + blockPos.getZ());
+		String[] signText = new String[4];
+		for (int i=0; i<4; i++) {
+			signText[i] = signBlockEntity.getTextOnRow(i).asString();
+		}
+		if ( shopSigns.containsKey(blockCoords)) {
+			if (Arrays.deepEquals(shopSigns.get(blockCoords).signText,signText)) {
+				return;
+			}
+		}
+
+//		LOGGER.info("coords are " + blockCoords);
+//		LOGGER.info("sign text is: " + String.join("\n", signText));
+		shopSigns.put(blockCoords, new ShopSign(blockPos,signText));
+		LOGGER.info(shopSigns.get(blockCoords));
+
+	}
 
 	private static void displayBoundingBox(MatrixStack matrixStack, float tickDelta) {
 		long currentTime = System.currentTimeMillis();
@@ -143,35 +153,21 @@ public class GetShopSigns implements ClientModInitializer {
 		drawHollowFill(matrixStack, minX, minY, maxX - minX, maxY - minY, 2, 0xffff0000);
 		if (hit.getType() == HitResult.Type.BLOCK) {
 			BlockPos blockPos = ((BlockHitResult) hit).getBlockPos();
-			BlockState blockState = MinecraftClient.getInstance().world.getBlockState(blockPos);
 			BlockEntity blockEntity = MinecraftClient.getInstance().world.getBlockEntity(blockPos);
-			Block block = blockState.getBlock();
 			if (blockEntity instanceof SignBlockEntity) {
 				try {
-//					Entity entitySign = ((EntityHitResult) hit).getEntity();
-//					TileEntity tileEntity = event.getWorld().getTileEntity(blockPos);
-//        	        		SignTileEntity signTileEntity = (SignTileEntity) tileEntity;
-					StringBuilder signText = new StringBuilder();
 					SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
+					StringBuilder signText = new StringBuilder();
 					for (int i=0; i<4; i++) {
 						signText.append(signBlockEntity.getTextOnRow(i).asString());
 						signText.append("\n");
 					}
-/*
-					for (Text line : signBlockEntity.texts) {
-						line.visit((part) -> {
-							signText.append(part);
-							return Optional.empty();
-						});
-					}
-*/
-					LOGGER.info(signText);
-
-		        	        client.player.sendMessage(new LiteralText("sign: " + signText.toString()).formatted(Formatting.AQUA), true);
+					parseSign(blockPos,signBlockEntity);
+					client.player.sendMessage(new LiteralText(new StringBuilder().append("sign: ").append(signText).append("X:").append(blockPos.getX()).append("Y:").append(blockPos.getY()).append("Z:").append(blockPos.getZ()).toString()).formatted(Formatting.AQUA), true);
 				}
 				catch (Exception e) {
 					LOGGER.error(e);
-	        	        	client.player.sendMessage(new LiteralText("OOPS! " + e.toString()).formatted(Formatting.AQUA), true);
+	        	    client.player.sendMessage(new LiteralText("OOPS! " + e).formatted(Formatting.AQUA), true);
 				}
 				return;
 			}
@@ -180,7 +176,6 @@ public class GetShopSigns implements ClientModInitializer {
 		LiteralText text = new LiteralText("Bounding " + minX + " " + minY + " " + width + " " + height + ": ");
 		client.player.sendMessage(text.append(getLabel(hit)), true);
 	}
-
 	private static void drawHollowFill(MatrixStack matrixStack, int x, int y, int width, int height, int stroke, int color) {
 		matrixStack.push();
 		matrixStack.translate(x-stroke, y-stroke, 0);
