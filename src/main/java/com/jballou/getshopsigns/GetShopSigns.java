@@ -79,6 +79,19 @@ public class GetShopSigns implements ClientModInitializer {
 	private static int lastCalculationWidth = 0;
 	private static int lastCalculationHeight = 0;
 
+
+	public static List<Block> getNearbyBlocks(Location location, int radius) {
+		List<Block> blocks = new ArrayList<Block>();
+		for(int x = location.getBlockX() - radius; x <= location.getBlockX() + radius; x++) {
+			for(int y = location.getBlockY() - radius; y <= location.getBlockY() + radius; y++) {
+				for(int z = location.getBlockZ() - radius; z <= location.getBlockZ() + radius; z++) {
+					blocks.add(location.getWorld().getBlockAt(x, y, z));
+				}
+			}
+		}
+		return blocks;
+	}
+
 	public static void parseSign(SignBlockEntity signBlockEntity) {
 		String[] signText = new String[4];
 		for (int i=0; i<4; i++) {
@@ -122,6 +135,7 @@ public class GetShopSigns implements ClientModInitializer {
 		lastCalculationTime = currentTime;
 
 		MinecraftClient client = MinecraftClient.getInstance();
+		client.player.getPos();
 		int width = client.getWindow().getScaledWidth();
 		int height = client.getWindow().getScaledHeight();
 		Vec3d cameraDirection = client.cameraEntity.getRotationVec(tickDelta);

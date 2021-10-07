@@ -28,8 +28,7 @@ import org.apache.logging.log4j.LogManager;
 
 
 public class ShopSign {
-    public BlockPos blockPos;
-    public transient String[] signText = new String[4];
+    public int x, y, z;
     public String sellerName = "";
     public String itemCode = "";
     public float itemQuantity = 0;
@@ -37,6 +36,10 @@ public class ShopSign {
     public float priceSell = 0;
     public Boolean canBuy = false;
     public Boolean canSell = false;
+
+    public transient BlockPos blockPos;
+    public transient String[] signText = new String[4];
+
     public ShopSign(BlockPos blockPos, String[] signText) {
         //GetShopSigns.LOGGER.info("shopsign init");
         this.setBlockPos(blockPos);
@@ -63,6 +66,9 @@ public class ShopSign {
 
     public void setBlockPos(BlockPos blockPos) {
         this.blockPos = blockPos;
+        this.x = blockPos.getX();
+        this.y = blockPos.getY();
+        this.z = blockPos.getZ();
     }
     public void setSignText(String[] signText) {
         if (this.signText != null && Arrays.deepEquals(this.signText, signText)) {
