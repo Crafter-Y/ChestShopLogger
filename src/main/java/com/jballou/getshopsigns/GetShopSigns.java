@@ -37,10 +37,11 @@ import org.apache.logging.log4j.LogManager;
 
 public class GetShopSigns implements ClientModInitializer {
 	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
-	public static Hashtable<String, ShopSign> shopSigns = new Hashtable<String, ShopSign>();
-	private static final HashSet<SignBlockEntity> signs = new HashSet<>();
-	public static Gson gson = new Gson();
+	public static Hashtable<Integer, ShopSign> shopSigns = new Hashtable<Integer, ShopSign>();
+	public static Hashtable<Integer, SignBlockEntity> signs = new Hashtable<Integer, SignBlockEntity>();
 
+
+	public static Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	@Override
 	public void onInitializeClient() {
 
@@ -56,6 +57,9 @@ public class GetShopSigns implements ClientModInitializer {
 						.executes(context -> {
 							String json = gson.toJson(shopSigns.values());
 							LOGGER.info(json);
+
+							context.getSource().sendFeedback(new LiteralText(String.format("Processed %d shop signs.",shopSigns.size())));
+
 							/*
 							for (ShopSign shopSign : shopSigns.values()) {
 								if (shopSign.sellerName != "")
@@ -75,8 +79,7 @@ public class GetShopSigns implements ClientModInitializer {
 	private static int lastCalculationWidth = 0;
 	private static int lastCalculationHeight = 0;
 
-	public static void parseSign(BlockPos blockPos, SignBlockEntity signBlockEntity) {
-		String blockCoords = new String(blockPos.getX() + "_" + blockPos.getY() + "_" + blockPos.getZ());
+	public static void parseSign(SignBlockEntity signBlockEntity) {
 		String[] signText = new String[4];
 		for (int i=0; i<4; i++) {
 			StringBuilder lineText = new StringBuilder();
@@ -86,24 +89,18 @@ public class GetShopSigns implements ClientModInitializer {
 				});
 			signText[i] = lineText.toString();
 		}
-		if ( shopSigns.containsKey(blockCoords)) {
-			if (Arrays.deepEquals(shopSigns.get(blockCoords).signText,signText)) {
-				//LOGGER.info("already got " + blockCoords);
-				return;
-			}
-		}
-
-		//LOGGER.info("coords are " + blockCoords);
-		//LOGGER.info("sign text is: " + String.join("\n", signText));
-		shopSigns.put(blockCoords, new ShopSign(blockPos,signText));
-		//LOGGER.info(shopSigns.get(blockCoords));
-
+		ShopSign shopSign = new ShopSign(signBlockEntity.getPos(),signText);
+		if (shopSign.sellerName != "")
+			shopSigns.put(signBlockEntity.hashCode(), shopSign);
 	}
 	public static void addSign(SignBlockEntity sign) {
 		try {
-			LOGGER.info("addSign " + sign.toString());
-			signs.add(sign);
-			parseSign(sign.getPos(), sign);
+			if (signs.containsKey(sign.hashCode())) {
+				return;
+			}
+			LOGGER.info("addSign " + sign.hashCode());
+			signs.put(sign.hashCode(), sign);
+			parseSign(sign);
 		}
 		catch (Exception e) {
 			LOGGER.error("OOPS! " + e);

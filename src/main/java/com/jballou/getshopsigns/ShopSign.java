@@ -29,7 +29,7 @@ import org.apache.logging.log4j.LogManager;
 
 public class ShopSign {
     public BlockPos blockPos;
-    public String[] signText = new String[4];
+    public transient String[] signText = new String[4];
     public String sellerName = "";
     public String itemCode = "";
     public float itemQuantity = 0;
