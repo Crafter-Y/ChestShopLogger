@@ -47,16 +47,18 @@ public class ShopSign {
             return "";
             //String.join("\n",this.signText);
         }
-        StringBuilder signText = new StringBuilder();
-        signText.append("blockPos: " + this.blockPos.toString());
-        signText.append(", sellerName: " + this.sellerName);
-        signText.append(", itemCode: " + this.itemCode);
-        signText.append(", itemQuantity: " + this.itemQuantity);
-        signText.append(", priceBuy: " + this.priceBuy);
-        signText.append(", priceSell: " + this.priceSell);
-        signText.append(", canBuy: " + this.canBuy);
-        signText.append(", canSell: " + this.canSell);
-        return signText.toString();
+        List<String> lines = new ArrayList<String>();
+
+        lines.add(String.format("blockPos: [%d, %d, %d]",this.blockPos.getX(),this.blockPos.getY(),this.blockPos.getZ()));
+        lines.add(String.format("sellerName: \"%s\"", this.sellerName));
+        lines.add(String.format("itemCode: \"%s\"", this.itemCode));
+        lines.add(String.format("itemQuantity: " + this.itemQuantity));
+        lines.add(String.format("priceBuy: " + this.priceBuy));
+        lines.add(String.format("priceSell: " + this.priceSell));
+        lines.add(String.format("canBuy: " + this.canBuy));
+        lines.add(String.format("canSell: " + this.canSell));
+        return String.join(", ", lines);
+        //return signText.toString();
     }
 
     public void setBlockPos(BlockPos blockPos) {
@@ -64,16 +66,19 @@ public class ShopSign {
     }
     public void setSignText(String[] signText) {
         if (this.signText != null && Arrays.deepEquals(this.signText, signText)) {
+            //GetShopSigns.LOGGER.info("bailing out, text unchanged");
             return;
         }
         this.signText = signText;
-        String regex = "(B ([0-9.]+))?(:)?(([0-9.]+) S)?";
+        String regex = "(B ([0-9.]+))?[ ]*(:)?[ ]*(([0-9.]+) S)?";
         Pattern pattern = Pattern.compile(regex);
         Matcher matcher = pattern.matcher(signText[2]);
         if (!matcher.matches()) {
+            //GetShopSigns.LOGGER.info("no matches");
             return;
         }
         if (matcher.group(2) == null && matcher.group(5) == null) {
+            //GetShopSigns.LOGGER.info("Price line not formatted as shop");
             return;
         }
         this.setSellerName(signText[0]);

@@ -1,9 +1,22 @@
 package com.jballou.getshopsigns;
 
+import com.google.gson.*;
+
+import com.jballou.getshopsigns.event.SignUpdateCallback;
+
+import java.lang.reflect.*;
 import java.util.*;
 
 import net.fabricmc.api.*;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v1.ClientCommandManager;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientBlockEntityEvents;
+
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.*;
+import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.argument;
+import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.literal;
+
 import net.minecraft.block.*;
 import net.minecraft.block.entity.*;
 import net.minecraft.client.*;
@@ -14,6 +27,7 @@ import net.minecraft.entity.decoration.*;
 import net.minecraft.entity.projectile.*;
 import net.minecraft.text.*;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.SignType;
 import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
 import net.minecraft.world.*;
@@ -24,9 +38,35 @@ import org.apache.logging.log4j.LogManager;
 public class GetShopSigns implements ClientModInitializer {
 	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
 	public static Hashtable<String, ShopSign> shopSigns = new Hashtable<String, ShopSign>();
+	private static final HashSet<SignBlockEntity> signs = new HashSet<>();
+	public static Gson gson = new Gson();
+
 	@Override
 	public void onInitializeClient() {
+
 		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
+		SignUpdateCallback.EVENT.register(GetShopSigns::addSign);
+		ClientBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register((blockEntity, world) -> {
+			if (blockEntity instanceof SignBlockEntity) {
+				removeSign((SignBlockEntity) blockEntity);
+			}
+		});
+		ClientCommandManager.DISPATCHER.register(
+				literal("getshopsigns")
+						.executes(context -> {
+							String json = gson.toJson(shopSigns.values());
+							LOGGER.info(json);
+							/*
+							for (ShopSign shopSign : shopSigns.values()) {
+								if (shopSign.sellerName != "")
+									LOGGER.info(shopSign);
+							}
+							*/
+							return 1;
+
+						})
+		);
+
 	}
 	private static long lastCalculationTime = 0;
 	private static boolean lastCalculationExists = false;
@@ -39,19 +79,39 @@ public class GetShopSigns implements ClientModInitializer {
 		String blockCoords = new String(blockPos.getX() + "_" + blockPos.getY() + "_" + blockPos.getZ());
 		String[] signText = new String[4];
 		for (int i=0; i<4; i++) {
-			signText[i] = signBlockEntity.getTextOnRow(i).asString();
+			StringBuilder lineText = new StringBuilder();
+			signBlockEntity.getTextOnRow(i).visit((part) -> {
+					lineText.append(part);
+					return Optional.empty();
+				});
+			signText[i] = lineText.toString();
 		}
 		if ( shopSigns.containsKey(blockCoords)) {
 			if (Arrays.deepEquals(shopSigns.get(blockCoords).signText,signText)) {
+				//LOGGER.info("already got " + blockCoords);
 				return;
 			}
 		}
 
-//		LOGGER.info("coords are " + blockCoords);
-//		LOGGER.info("sign text is: " + String.join("\n", signText));
+		//LOGGER.info("coords are " + blockCoords);
+		//LOGGER.info("sign text is: " + String.join("\n", signText));
 		shopSigns.put(blockCoords, new ShopSign(blockPos,signText));
-		LOGGER.info(shopSigns.get(blockCoords));
+		//LOGGER.info(shopSigns.get(blockCoords));
 
+	}
+	public static void addSign(SignBlockEntity sign) {
+		try {
+			LOGGER.info("addSign " + sign.toString());
+			signs.add(sign);
+			parseSign(sign.getPos(), sign);
+		}
+		catch (Exception e) {
+			LOGGER.error("OOPS! " + e);
+		}
+	}
+
+	public static void removeSign(SignBlockEntity sign) {
+		signs.remove(sign);
 	}
 
 	private static void displayBoundingBox(MatrixStack matrixStack, float tickDelta) {
@@ -155,24 +215,9 @@ public class GetShopSigns implements ClientModInitializer {
 			BlockPos blockPos = ((BlockHitResult) hit).getBlockPos();
 			BlockEntity blockEntity = MinecraftClient.getInstance().world.getBlockEntity(blockPos);
 			if (blockEntity instanceof SignBlockEntity) {
-				try {
-					SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
-					StringBuilder signText = new StringBuilder();
-					for (int i=0; i<4; i++) {
-						signText.append(signBlockEntity.getTextOnRow(i).asString());
-						signText.append("\n");
-					}
-					parseSign(blockPos,signBlockEntity);
-					client.player.sendMessage(new LiteralText(new StringBuilder().append("sign: ").append(signText).append("X:").append(blockPos.getX()).append("Y:").append(blockPos.getY()).append("Z:").append(blockPos.getZ()).toString()).formatted(Formatting.AQUA), true);
-				}
-				catch (Exception e) {
-					LOGGER.error(e);
-	        	    client.player.sendMessage(new LiteralText("OOPS! " + e).formatted(Formatting.AQUA), true);
-				}
-				return;
+				addSign((SignBlockEntity) blockEntity);
 			}
 		}
-
 		LiteralText text = new LiteralText("Bounding " + minX + " " + minY + " " + width + " " + height + ": ");
 		client.player.sendMessage(text.append(getLabel(hit)), true);
 	}
