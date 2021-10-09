@@ -4,18 +4,32 @@ import com.google.gson.*;
 
 import com.jballou.getshopsigns.event.SignUpdateCallback;
 
+import com.jballou.getshopsigns.storage.Stores;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
+
 import java.lang.reflect.*;
+import java.io.*;
 import java.util.*;
 
+import com.mojang.brigadier.arguments.*;
+import com.sun.jdi.connect.Connector;
 import net.fabricmc.api.*;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v1.ClientCommandManager;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientBlockEntityEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.*;
-import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.argument;
-import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.literal;
+import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.*;
 
 import net.minecraft.block.*;
 import net.minecraft.block.entity.*;
@@ -32,21 +46,35 @@ import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
 import net.minecraft.world.*;
 
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
+
+
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
+
+
 public class GetShopSigns implements ClientModInitializer {
-	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
+	public static final String MOD_ID = "getshopsigns";
+	public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 	public static Hashtable<Integer, ShopSign> shopSigns = new Hashtable<Integer, ShopSign>();
 	public static Hashtable<Integer, SignBlockEntity> signs = new Hashtable<Integer, SignBlockEntity>();
-
+	//MinecraftClient.runDirectory
+	private String CONFIG_PATH = String.format("%s/config/%s", MinecraftClient.getInstance().runDirectory, this.MOD_ID);
+	private final String fileJson = String.format("%s/%s.json", CONFIG_PATH, "shops");
 
 	public static Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	@Override
 	public void onInitializeClient() {
-
-		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
+		Stores.reload();
+//		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
 		SignUpdateCallback.EVENT.register(GetShopSigns::addSign);
+		ClientLifecycleEvents.CLIENT_STOPPING.register(this::gameClosing);
+//		KeyBindingHelper.registerKeyBinding(this.xrayButton);
+//		KeyBindingHelper.registerKeyBinding(this.guiButton);
+
 		ClientBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register((blockEntity, world) -> {
 			if (blockEntity instanceof SignBlockEntity) {
 				removeSign((SignBlockEntity) blockEntity);
@@ -54,24 +82,64 @@ public class GetShopSigns implements ClientModInitializer {
 		});
 		ClientCommandManager.DISPATCHER.register(
 				literal("getshopsigns")
+						.then(
+								argument("radius", IntegerArgumentType.integer(0,2048))
+										.executes(context -> {
+											int ssSize = shopSigns.size();
+											getNearbyBlocks(MinecraftClient.getInstance().player.getBlockPos(), IntegerArgumentType.getInteger(context, "radius"));
+											writeJSON();
+											context.getSource().sendFeedback(new LiteralText(String.format("Processed %d shop signs (%d new) in %d block radius.",shopSigns.size(),(shopSigns.size() - ssSize), context.getArgument("radius", Integer.class))));
+											return 1;
+										})
+						)
 						.executes(context -> {
-							String json = gson.toJson(shopSigns.values());
-							LOGGER.info(json);
-
-							context.getSource().sendFeedback(new LiteralText(String.format("Processed %d shop signs.",shopSigns.size())));
-
-							/*
-							for (ShopSign shopSign : shopSigns.values()) {
-								if (shopSign.sellerName != "")
-									LOGGER.info(shopSign);
-							}
-							*/
+							int ssSize = shopSigns.size();
+							getNearbyBlocks(MinecraftClient.getInstance().player.getBlockPos(), 256);
+							writeJSON();
+							context.getSource().sendFeedback(new LiteralText(String.format("Processed %d shop signs (%d new) in 256 block radius.",shopSigns.size(),(shopSigns.size() - ssSize))));
 							return 1;
-
 						})
 		);
-
 	}
+	/**
+	 * Upon game closing, attempt to save our json stores. This means we can be a little lazy with how
+	 * we go about saving throughout the rest of the mod
+	 */
+	private void gameClosing(MinecraftClient client) {
+		LOGGER.info("gameClosing");
+		writeJSON();
+	}
+
+	public void writeJSON() {
+		Stores.write();
+		MinecraftServer server = MinecraftClient.getInstance().player.getServer();
+		if (server != null){
+			StringBuilder lineText = new StringBuilder();
+
+			server.getServerMetadata().getDescription().visit((part) -> {
+				lineText.append(part);
+				return Optional.empty();
+			});
+			LOGGER.info(String.format("name %s ip %s description %s",server.getName(),server.getServerIp(), lineText));
+		}
+		Gson gson = new GsonBuilder()
+				.setPrettyPrinting()
+				.create();
+
+		try {
+			if (new File(CONFIG_PATH).mkdirs()) {
+				LOGGER.info("mkdir");
+			}
+			try (FileWriter writer = new FileWriter(fileJson)) {
+				gson.toJson(shopSigns.values(), writer);
+				writer.flush();
+			}
+
+		} catch (IOException | JsonIOException e) {
+			LOGGER.catching(e);
+		}
+	}
+
 	private static long lastCalculationTime = 0;
 	private static boolean lastCalculationExists = false;
 	private static int lastCalculationMinX = 0;
@@ -80,12 +148,16 @@ public class GetShopSigns implements ClientModInitializer {
 	private static int lastCalculationHeight = 0;
 
 
-	public static List<Block> getNearbyBlocks(Location location, int radius) {
+	public static List<Block> getNearbyBlocks(BlockPos location, int radius) {
+		Stores.reload();
 		List<Block> blocks = new ArrayList<Block>();
-		for(int x = location.getBlockX() - radius; x <= location.getBlockX() + radius; x++) {
-			for(int y = location.getBlockY() - radius; y <= location.getBlockY() + radius; y++) {
-				for(int z = location.getBlockZ() - radius; z <= location.getBlockZ() + radius; z++) {
-					blocks.add(location.getWorld().getBlockAt(x, y, z));
+		for(int x = location.getX() - radius; x <= location.getX() + radius; x++) {
+			for(int y = 0; y <= 256; y++) {
+				for(int z = location.getZ() - radius; z <= location.getZ() + radius; z++) {
+					BlockEntity blockEntity = MinecraftClient.getInstance().world.getBlockEntity(new BlockPos(x, y, z));
+					if (blockEntity instanceof SignBlockEntity) {
+						addSign((SignBlockEntity) blockEntity);
+					}
 				}
 			}
 		}
@@ -104,7 +176,7 @@ public class GetShopSigns implements ClientModInitializer {
 		}
 		ShopSign shopSign = new ShopSign(signBlockEntity.getPos(),signText);
 		if (shopSign.sellerName != "")
-			shopSigns.put(signBlockEntity.hashCode(), shopSign);
+			shopSigns.put(signBlockEntity.getPos().hashCode(), shopSign);
 	}
 	public static void addSign(SignBlockEntity sign) {
 		try {
@@ -123,6 +195,7 @@ public class GetShopSigns implements ClientModInitializer {
 	public static void removeSign(SignBlockEntity sign) {
 		signs.remove(sign);
 	}
+	/*
 
 	private static void displayBoundingBox(MatrixStack matrixStack, float tickDelta) {
 		long currentTime = System.currentTimeMillis();
@@ -345,4 +418,6 @@ public class GetShopSigns implements ClientModInitializer {
 				entity
 		));
 	}
+
+	 */
 }

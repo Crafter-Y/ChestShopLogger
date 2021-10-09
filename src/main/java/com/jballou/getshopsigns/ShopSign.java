@@ -2,36 +2,16 @@ package com.jballou.getshopsigns;
 
 import java.util.regex.*;
 import java.util.*;
-
-import net.fabricmc.api.*;
-import net.fabricmc.fabric.api.client.rendering.v1.*;
-import net.minecraft.block.*;
-import net.minecraft.block.entity.*;
-import net.minecraft.client.*;
-import net.minecraft.client.gui.*;
-import net.minecraft.client.util.math.*;
-import net.minecraft.entity.*;
-import net.minecraft.entity.decoration.*;
-import net.minecraft.entity.projectile.*;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.SignItem;
-import net.minecraft.text.*;
-//import net.minecraft.tileentity.TileEntity;
-//import net.minecraft.tileentity.SignTileEntity;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
-import net.minecraft.world.*;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
 
 
 public class ShopSign {
-    public int x, y, z;
+    public String posString = "";
+    public Integer posHashCode = 0;
+    public Integer x, y, z;
     public String sellerName = "";
     public String itemCode = "";
-    public float itemQuantity = 0;
+    public Integer itemQuantity = 0;
     public float priceBuy = 0;
     public float priceSell = 0;
     public Boolean canBuy = false;
@@ -42,6 +22,8 @@ public class ShopSign {
 
     public ShopSign(BlockPos blockPos, String[] signText) {
         //GetShopSigns.LOGGER.info("shopsign init");
+        this.posHashCode = blockPos.hashCode();
+        this.posString = String.format("%d %d %d", blockPos.getX(), blockPos.getY(), blockPos.getZ());
         this.setBlockPos(blockPos);
         this.setSignText(signText);
     }
@@ -88,7 +70,7 @@ public class ShopSign {
             return;
         }
         this.setSellerName(signText[0]);
-        this.setItemQuantity(Float.parseFloat(signText[1]));
+        this.setItemQuantity(Integer.parseInt(signText[1]));
         this.setItemCode(signText[3]);
 
         if (matcher.group(2) == null)
@@ -109,7 +91,7 @@ public class ShopSign {
     public void setItemCode(String itemCode) {
         this.itemCode = itemCode;
     }
-    public void setItemQuantity(float itemQuantity) {
+    public void setItemQuantity(Integer itemQuantity) {
         this.itemQuantity = itemQuantity;
     }
     public void setPriceBuy(float priceBuy) {
@@ -123,6 +105,28 @@ public class ShopSign {
     }
     public void setCanSell(Boolean canSell) {
         this.canSell = canSell;
+    }
+
+    public String getSellerName() {
+        return this.sellerName;
+    }
+    public String getItemCode() {
+        return this.itemCode;
+    }
+    public Integer getItemQuantity() {
+        return this.itemQuantity;
+    }
+    public float getPriceBuy() {
+        return this.priceBuy;
+    }
+    public float getPriceSell() {
+        return this.priceSell;
+    }
+    public Boolean getCanBuy() {
+        return this.canBuy;
+    }
+    public Boolean getCanSell() {
+        return this.canSell;
     }
 
 }
