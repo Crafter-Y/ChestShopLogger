@@ -4,7 +4,9 @@ import java.util.regex.*;
 import java.util.*;
 import net.minecraft.util.math.*;
 
-
+/**
+ * Individual entities for tracking shop signs.
+ */
 public class ShopSign {
     public String posString = "";
     public Integer posHashCode = 0;
@@ -16,6 +18,8 @@ public class ShopSign {
     public float priceSell = 0;
     public Boolean canBuy = false;
     public Boolean canSell = false;
+    public float priceBuyEach = 0;
+    public float priceSellEach = 0;
 
     public transient BlockPos blockPos;
     public transient String[] signText = new String[4];
@@ -96,9 +100,13 @@ public class ShopSign {
     }
     public void setPriceBuy(float priceBuy) {
         this.priceBuy = priceBuy;
+        if ((priceBuy > 0.0) && (this.itemQuantity > 0))
+            this.priceBuyEach = priceBuy / this.itemQuantity;
     }
     public void setPriceSell(float priceSell) {
         this.priceSell = priceSell;
+        if ((priceSell > 0.0) && (this.itemQuantity > 0))
+            this.priceSellEach = priceSell / this.itemQuantity;
     }
     public void setCanBuy(Boolean canBuy) {
         this.canBuy = canBuy;
@@ -121,6 +129,10 @@ public class ShopSign {
     }
     public float getPriceSell() {
         return this.priceSell;
+    }
+    public float getPriceBuyEach() { return this.priceBuyEach; }
+    public float getPriceSellEach() {
+        return this.priceSellEach;
     }
     public Boolean getCanBuy() {
         return this.canBuy;

@@ -1,27 +1,26 @@
-# Bounding Box Minecraft Mod
+# Get Shop Signs
 
+## Purpose
 
+This mod is designed to take the guesswork and confusion out of servers with
+multiple player-run chest/sign shops. I'm constantly running around hunting for
+the right shop that has the price I remember, or finding something cheaper
+after buying for a higher price.
 
-<img src="screenshot.png" data-canonical-src="screenshot.png" height="500" />
+## Planned functionality
 
-## Setup
+To help mitigate this, I'm trying my hand at my first Minecraft mod, with the
+following goals:
 
-For setup instructions please see the [fabric wiki page](https://fabricmc.net/wiki/tutorial:setup) that relates to the IDE that you are using.
+- Player runs a command which queries all blocks within a cube around him
+- Loop gets the text of the sign, if it's a chest shop, parse out the values
+for seller, item, quantity, buy and sell prices.
+- Store those values in a persistent way. To start with, I'm going to use a
+JSON file, but I may move it to a SQL database so it can be indexed and queried
+directly.
 
-## License
+## General notes
 
-    Shows bounding boxes
-    Copyright (C) 2020  Facundo Emmanuel Messulam
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+This is my first attempt at a mod, and I'm not a Java guy, so I am sure the code
+will be horrible. My intent is to make this as simple and useful as possible, and
+if other people want to extend it, I'll gladly take PRs.
