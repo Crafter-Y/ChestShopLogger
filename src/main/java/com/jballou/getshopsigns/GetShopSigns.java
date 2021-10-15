@@ -18,6 +18,10 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import java.lang.reflect.*;
 import java.io.*;
 import java.util.*;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.Iterator;
 
 import com.mojang.brigadier.arguments.*;
 import com.sun.jdi.connect.Connector;
@@ -34,6 +38,8 @@ import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.*;
 import net.minecraft.block.*;
 import net.minecraft.block.entity.*;
 import net.minecraft.client.*;
+import net.minecraft.client.network.*;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.*;
 import net.minecraft.client.util.math.*;
 import net.minecraft.entity.*;
@@ -46,11 +52,17 @@ import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
 import net.minecraft.world.*;
 
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ServerMetadata;
+import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.world.*;
+
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 
+import net.minecraft.world.dimension.DimensionType;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
@@ -64,13 +76,12 @@ import org.apache.logging.log4j.LogManager;
  * TODO: allow searching at arbitrary points, allowing updates of shop districts from any location
  */
 public class GetShopSigns implements ClientModInitializer {
+
 	public static final String MOD_ID = "getshopsigns";
 	public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 	public static Hashtable<Integer, ShopSign> shopSigns = new Hashtable<Integer, ShopSign>();
 	public static Hashtable<Integer, SignBlockEntity> signs = new Hashtable<Integer, SignBlockEntity>();
-	//MinecraftClient.runDirectory
 	private String CONFIG_PATH = String.format("%s/config/%s", MinecraftClient.getInstance().runDirectory, this.MOD_ID);
-	private final String fileJson = String.format("%s/%s.json", CONFIG_PATH, "shops");
 
 	public static Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	@Override
@@ -79,11 +90,8 @@ public class GetShopSigns implements ClientModInitializer {
 	 */
 	public void onInitializeClient() {
 		Stores.reload();
-//		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
 		SignUpdateCallback.EVENT.register(GetShopSigns::addSign);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(this::gameClosing);
-//		KeyBindingHelper.registerKeyBinding(this.xrayButton);
-//		KeyBindingHelper.registerKeyBinding(this.guiButton);
 
 		ClientBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register((blockEntity, world) -> {
 			if (blockEntity instanceof SignBlockEntity) {
@@ -110,6 +118,42 @@ public class GetShopSigns implements ClientModInitializer {
 							return 1;
 						})
 		);
+		ClientCommandManager.DISPATCHER.register(
+				literal("getshopitem")
+						.then(
+								argument("itemCode", StringArgumentType.string())
+										.executes(context -> {
+											List<ShopSign> setMatches = shopSigns.entrySet()
+													.stream()
+													.filter(entry -> entry.getValue().itemCode.contains(StringArgumentType.getString(context, "itemCode")))
+													.map(Map.Entry::getValue)
+													.sorted(Comparator.comparing(ShopSign::getItemCode))
+													.sorted(Comparator.comparing(ShopSign::getPriceBuyEach))
+													.collect(Collectors.toList());
+//											List<Person> personList = personSet.stream().sorted((e1, e2) ->
+//													e1.getName().compareTo(e2.getName())).collect(Collectors.toList());
+											StringBuilder results = new StringBuilder();
+											Iterator<ShopSign> itr = setMatches.iterator();
+											String thisItem = "";
+											while(itr.hasNext()){
+												ShopSign thisSign = itr.next();
+												if (!thisItem.equals(thisSign.itemCode)) {
+													thisItem = thisSign.itemCode;
+													results.append(String.format("---------- %s ----------\n",thisItem));
+												}
+												results.append(String.format("%s (%s) Qty: %d", thisSign.posString,thisSign.sellerName,thisSign.itemQuantity));
+												if (thisSign.canBuy)
+													results.append(String.format(" Buy: %.2f",thisSign.priceBuy));
+												if (thisSign.canSell)
+													results.append(String.format(" Sell: %.2f",thisSign.priceSell));
+												results.append("\n");
+											}
+											context.getSource().sendFeedback(new LiteralText(String.format("--------------------\nFound %d shops matching query '%s'\n--------------------\n\n%s",setMatches.size(), context.getArgument("itemCode", String.class),results)));
+											return 1;
+										})
+						)
+		);
+
 	}
 
 	/**
@@ -126,16 +170,12 @@ public class GetShopSigns implements ClientModInitializer {
 	 */
 	public void writeJSON() {
 		Stores.write();
-		MinecraftServer server = MinecraftClient.getInstance().player.getServer();
-		if (server != null){
-			StringBuilder lineText = new StringBuilder();
-
-			server.getServerMetadata().getDescription().visit((part) -> {
-				lineText.append(part);
-				return Optional.empty();
-			});
-			LOGGER.info(String.format("name %s ip %s description %s",server.getName(),server.getServerIp(), lineText));
-		}
+		ServerInfo serverInfo = MinecraftClient.getInstance().getCurrentServerEntry();
+		String serverAddress = "localhost";
+		if (serverInfo != null)
+			serverAddress = serverInfo.address;
+		String fileJson = String.format("%s/shops.%s.json", CONFIG_PATH, serverAddress);
+		LOGGER.info(String.format("fileJson: %s", fileJson));
 		Gson gson = new GsonBuilder()
 				.setPrettyPrinting()
 				.create();

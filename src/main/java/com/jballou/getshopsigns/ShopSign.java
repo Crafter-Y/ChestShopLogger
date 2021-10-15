@@ -2,12 +2,17 @@ package com.jballou.getshopsigns;
 
 import java.util.regex.*;
 import java.util.*;
+
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ServerInfo;
 import net.minecraft.util.math.*;
 
 /**
  * Individual entities for tracking shop signs.
  */
 public class ShopSign {
+    public String serverAddress;
+    public String serverDimension;
     public String posString = "";
     public Integer posHashCode = 0;
     public Integer x, y, z;
@@ -25,29 +30,16 @@ public class ShopSign {
     public transient String[] signText = new String[4];
 
     public ShopSign(BlockPos blockPos, String[] signText) {
-        //GetShopSigns.LOGGER.info("shopsign init");
+        ServerInfo serverInfo = MinecraftClient.getInstance().getCurrentServerEntry();
+        if (serverInfo != null)
+            this.serverAddress = MinecraftClient.getInstance().getCurrentServerEntry().address;
+        else
+            this.serverAddress = "localhost";
+        this.serverDimension = "overworld"; //TODO: make this work
         this.posHashCode = blockPos.hashCode();
         this.posString = String.format("%d %d %d", blockPos.getX(), blockPos.getY(), blockPos.getZ());
         this.setBlockPos(blockPos);
         this.setSignText(signText);
-    }
-    public String toString(){
-        if (this.sellerName == "") {
-            return "";
-            //String.join("\n",this.signText);
-        }
-        List<String> lines = new ArrayList<String>();
-
-        lines.add(String.format("blockPos: [%d, %d, %d]",this.blockPos.getX(),this.blockPos.getY(),this.blockPos.getZ()));
-        lines.add(String.format("sellerName: \"%s\"", this.sellerName));
-        lines.add(String.format("itemCode: \"%s\"", this.itemCode));
-        lines.add(String.format("itemQuantity: " + this.itemQuantity));
-        lines.add(String.format("priceBuy: " + this.priceBuy));
-        lines.add(String.format("priceSell: " + this.priceSell));
-        lines.add(String.format("canBuy: " + this.canBuy));
-        lines.add(String.format("canSell: " + this.canSell));
-        return String.join(", ", lines);
-        //return signText.toString();
     }
 
     public void setBlockPos(BlockPos blockPos) {

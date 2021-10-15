@@ -24,3 +24,12 @@ directly.
 This is my first attempt at a mod, and I'm not a Java guy, so I am sure the code
 will be horrible. My intent is to make this as simple and useful as possible, and
 if other people want to extend it, I'll gladly take PRs.
+
+## TODOs
+
+[ ] Load JSON data into list at connection
+[ ] Store blocks indexed by world and server, as there is currently only one list which is not great.
+[ ] Allow searching at arbitrary points, to do updates of shop districts from any location.
+[ ] Create search function to find best buy/sell prices for items.
+[ ] Allow comparison of complex items, i.e. "Piston" = recipe components, "Iron Block" = 9 Iron Ingots, etc.
+[ ] Configurable backend to allow SQLite/MySQL/Postgres exporting natively.
