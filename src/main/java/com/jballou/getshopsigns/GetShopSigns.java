@@ -125,7 +125,7 @@ public class GetShopSigns implements ClientModInitializer {
 										.executes(context -> {
 											List<ShopSign> setMatches = shopSigns.entrySet()
 													.stream()
-													.filter(entry -> entry.getValue().itemCode.contains(StringArgumentType.getString(context, "itemCode")))
+													.filter(entry -> entry.getValue().itemCode.toLowerCase(Locale.ROOT).contains(StringArgumentType.getString(context, "itemCode").toLowerCase(Locale.ROOT)))
 													.map(Map.Entry::getValue)
 													.sorted(Comparator.comparing(ShopSign::getItemCode))
 													.sorted(Comparator.comparing(ShopSign::getPriceBuyEach))
