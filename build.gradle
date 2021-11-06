@@ -89,3 +89,10 @@ publishing {
 		// mavenLocal()
 	}
 }
+
+task copyJar(type: Copy) {
+    from jar
+    into "~/.minecraft/mods"
+}
+
+build.dependsOn copyJar

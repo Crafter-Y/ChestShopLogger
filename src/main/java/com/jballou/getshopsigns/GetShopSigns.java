@@ -82,7 +82,12 @@ public class GetShopSigns implements ClientModInitializer {
 	public static Hashtable<Integer, ShopSign> shopSigns = new Hashtable<Integer, ShopSign>();
 	public static Hashtable<Integer, SignBlockEntity> signs = new Hashtable<Integer, SignBlockEntity>();
 	private String CONFIG_PATH = String.format("%s/config/%s", MinecraftClient.getInstance().runDirectory, this.MOD_ID);
+	private String serverAddress = "localhost";
+	private String currentDatabaseName;
+	private String currentDatabaseFile;
 
+	private ServerInfo serverInfo;
+	private Db databaseObject;
 	public static Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	@Override
 	/**
@@ -99,10 +104,11 @@ public class GetShopSigns implements ClientModInitializer {
 			}
 		});
 		ClientCommandManager.DISPATCHER.register(
-				literal("getshopsigns")
+				literal("gss_refresh_signs")
 						.then(
 								argument("radius", IntegerArgumentType.integer(0,2048))
 										.executes(context -> {
+											CheckDatabaseConnection();
 											int ssSize = shopSigns.size();
 											getNearbyBlocks(MinecraftClient.getInstance().player.getBlockPos(), IntegerArgumentType.getInteger(context, "radius"));
 											writeJSON();
@@ -111,6 +117,7 @@ public class GetShopSigns implements ClientModInitializer {
 										})
 						)
 						.executes(context -> {
+							CheckDatabaseConnection();
 							int ssSize = shopSigns.size();
 							getNearbyBlocks(MinecraftClient.getInstance().player.getBlockPos(), 256);
 							writeJSON();
@@ -119,10 +126,11 @@ public class GetShopSigns implements ClientModInitializer {
 						})
 		);
 		ClientCommandManager.DISPATCHER.register(
-				literal("getshopitem")
+				literal("gss_find_item")
 						.then(
 								argument("itemCode", StringArgumentType.string())
 										.executes(context -> {
+											CheckDatabaseConnection();
 											List<ShopSign> setMatches = shopSigns.entrySet()
 													.stream()
 													.filter(entry -> entry.getValue().itemCode.toLowerCase(Locale.ROOT).contains(StringArgumentType.getString(context, "itemCode").toLowerCase(Locale.ROOT)))
@@ -154,6 +162,35 @@ public class GetShopSigns implements ClientModInitializer {
 						)
 		);
 
+	}
+
+	public Integer CheckDatabaseConnection() {
+		if (serverInfo == null)
+			serverInfo = MinecraftClient.getInstance().getCurrentServerEntry();
+		if (serverInfo != null) {
+			if (serverAddress != serverInfo.address) {
+				serverAddress = serverInfo.address;
+			}
+		}
+		return UpdateDatabaseConnection();
+	}
+	public Integer UpdateDatabaseConnection() {
+		if ((currentDatabaseName == serverAddress) || (databaseObject == null)) {
+			return 0;
+		}
+		if (databaseObject != null) {
+			//databaseObject.closeConnection();
+		}
+		signs.clear();
+		shopSigns.clear();
+		currentDatabaseFile = String.format("%s/shops.%s.sqlite", CONFIG_PATH, serverAddress);
+		databaseObject = new Db(currentDatabaseFile);
+		databaseObject.open();
+		if (databaseObject.checkConnection()) {
+			// TODO: Load records from database into the signs/shopSigns hashtables
+			currentDatabaseName = serverAddress;
+		}
+		return 1;
 	}
 
 	/**
