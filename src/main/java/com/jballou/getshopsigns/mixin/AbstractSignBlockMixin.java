@@ -25,6 +25,7 @@ public class AbstractSignBlockMixin {
     @Inject(method = "onUse", at = @At("HEAD"))
     public void onSignUse(BlockState state, World world, BlockPos pos, PlayerEntity player, Hand hand, BlockHitResult hit, CallbackInfoReturnable<ActionResult> cir) {
         if (player.isSneaking()) {
+            cir.setReturnValue(ActionResult.CONSUME);
             BlockEntity blockEntity = world.getBlockEntity(pos);
             if (blockEntity instanceof SignBlockEntity) {
                 SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;

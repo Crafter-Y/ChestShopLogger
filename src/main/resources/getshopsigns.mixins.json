@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.jballou.getshopsigns.mixin",
+  "compatibilityLevel": "JAVA_16",
+  "mixins": [],
+  "client": ["AbstractSignBlockMixin", "SignBlockEntityAccessor"],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

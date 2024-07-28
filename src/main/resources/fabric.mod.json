@@ -5,22 +5,19 @@
 
   "name": "Get Shop Signs",
   "description": "Get shop signs and record them to a JSON file",
-  "authors": [
-    "jballou"
-  ],
+  "authors": ["jballou"],
   "contact": {
     "homepage": "https://jballou.com/",
     "sources": "https://github.com/jaredballou/getshopsigns"
   },
+  "mixins": ["getshopsigns.mixins.json"],
 
   "license": "GPL3",
   "icon": "assets/getshopsigns/icon.png",
 
   "environment": "*",
   "entrypoints": {
-    "client": [
-      "com.jballou.getshopsigns.GetShopSigns"
-    ]
+    "client": ["com.jballou.getshopsigns.GetShopSigns"]
   },
 
   "depends": {
