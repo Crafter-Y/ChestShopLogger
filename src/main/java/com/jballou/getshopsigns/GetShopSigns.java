@@ -1,301 +1,297 @@
 package com.jballou.getshopsigns;
 
-import com.google.gson.*;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.PrimitiveIterator;
 
-import com.jballou.getshopsigns.event.SignUpdateCallback;
-
-import com.jballou.getshopsigns.storage.Stores;
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.BoolArgumentType;
-import com.mojang.brigadier.arguments.FloatArgumentType;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.ArgumentBuilder;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
-
-import java.lang.reflect.*;
-import java.io.*;
-import java.util.*;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.Iterator;
-
-import com.mojang.brigadier.arguments.*;
-import com.sun.jdi.connect.Connector;
+//import com.jballou.getshopsigns.ext.SignBlockEntityExt;
+import com.jballou.getshopsigns.mixin.SignBlockEntityAccessor;
 import net.fabricmc.api.*;
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.command.v1.ClientCommandManager;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientBlockEntityEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
-
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.*;
-import static net.fabricmc.fabric.api.client.command.v1.ClientCommandManager.*;
-
 import net.minecraft.block.*;
 import net.minecraft.block.entity.*;
 import net.minecraft.client.*;
-import net.minecraft.client.network.*;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.*;
 import net.minecraft.client.util.math.*;
 import net.minecraft.entity.*;
 import net.minecraft.entity.decoration.*;
 import net.minecraft.entity.projectile.*;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.SignItem;
 import net.minecraft.text.*;
+//import net.minecraft.tileentity.TileEntity;
+//import net.minecraft.tileentity.SignTileEntity;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.SignType;
 import net.minecraft.util.hit.*;
 import net.minecraft.util.math.*;
 import net.minecraft.world.*;
 
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.ServerMetadata;
-import net.minecraft.server.integrated.IntegratedServer;
-import net.minecraft.world.*;
-
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-
-
-import net.minecraft.world.dimension.DimensionType;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
-
-/**
- * GetShopSigns class
- * This mod looks at entities to find signs, and if the text rows match a shop format, then process the data and add
- * it to the global list. Also emits a JSON array of those objects.
- * TODO: Load JSON data into list at connection
- * TODO: Store blocks indexed by world and server, as there is currently only one list which is not great.
- * TODO: allow searching at arbitrary points, allowing updates of shop districts from any location
- */
 public class GetShopSigns implements ClientModInitializer {
-
-	public static final String MOD_ID = "getshopsigns";
-	public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
-	public static Hashtable<Integer, ShopSign> shopSigns = new Hashtable<Integer, ShopSign>();
-	public static Hashtable<Integer, SignBlockEntity> signs = new Hashtable<Integer, SignBlockEntity>();
-	private String CONFIG_PATH = String.format("%s/config/%s", MinecraftClient.getInstance().runDirectory, this.MOD_ID);
-	private String serverAddress = "localhost";
-	private String currentDatabaseName;
-	private String currentDatabaseFile;
-
-	private ServerInfo serverInfo;
-	private Db databaseObject;
-	public static Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	public static final Logger LOGGER = LogManager.getLogger("getshopsigns");
+//	private static final HashSet<SignBlockEntity> signs = new HashSet<>();
+//	private static String searchText = "";
 	@Override
-	/**
-	 * Setup code for mod, mostly sets up data structures and commands to do checks.
-	 */
 	public void onInitializeClient() {
-		Stores.reload();
-		SignUpdateCallback.EVENT.register(GetShopSigns::addSign);
-		ClientLifecycleEvents.CLIENT_STOPPING.register(this::gameClosing);
-
-		ClientBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register((blockEntity, world) -> {
-			if (blockEntity instanceof SignBlockEntity) {
-				removeSign((SignBlockEntity) blockEntity);
-			}
-		});
-		ClientCommandManager.DISPATCHER.register(
-				literal("gss_refresh_signs")
-						.then(
-								argument("radius", IntegerArgumentType.integer(0,2048))
-										.executes(context -> {
-											CheckDatabaseConnection();
-											int ssSize = shopSigns.size();
-											getNearbyBlocks(MinecraftClient.getInstance().player.getBlockPos(), IntegerArgumentType.getInteger(context, "radius"));
-											writeJSON();
-											context.getSource().sendFeedback(new LiteralText(String.format("Processed %d shop signs (%d new) in %d block radius.",shopSigns.size(),(shopSigns.size() - ssSize), context.getArgument("radius", Integer.class))));
-											return 1;
-										})
-						)
-						.executes(context -> {
-							CheckDatabaseConnection();
-							int ssSize = shopSigns.size();
-							getNearbyBlocks(MinecraftClient.getInstance().player.getBlockPos(), 256);
-							writeJSON();
-							context.getSource().sendFeedback(new LiteralText(String.format("Processed %d shop signs (%d new) in 256 block radius.",shopSigns.size(),(shopSigns.size() - ssSize))));
-							return 1;
-						})
-		);
-		ClientCommandManager.DISPATCHER.register(
-				literal("gss_find_item")
-						.then(
-								argument("itemCode", StringArgumentType.string())
-										.executes(context -> {
-											CheckDatabaseConnection();
-											List<ShopSign> setMatches = shopSigns.entrySet()
-													.stream()
-													.filter(entry -> entry.getValue().itemCode.toLowerCase(Locale.ROOT).contains(StringArgumentType.getString(context, "itemCode").toLowerCase(Locale.ROOT)))
-													.map(Map.Entry::getValue)
-													.sorted(Comparator.comparing(ShopSign::getItemCode))
-													.sorted(Comparator.comparing(ShopSign::getPriceBuyEach))
-													.collect(Collectors.toList());
-//											List<Person> personList = personSet.stream().sorted((e1, e2) ->
-//													e1.getName().compareTo(e2.getName())).collect(Collectors.toList());
-											StringBuilder results = new StringBuilder();
-											Iterator<ShopSign> itr = setMatches.iterator();
-											String thisItem = "";
-											while(itr.hasNext()){
-												ShopSign thisSign = itr.next();
-												if (!thisItem.equals(thisSign.itemCode)) {
-													thisItem = thisSign.itemCode;
-													results.append(String.format("---------- %s ----------\n",thisItem));
-												}
-												results.append(String.format("%s (%s) Qty: %d", thisSign.posString,thisSign.sellerName,thisSign.itemQuantity));
-												if (thisSign.canBuy)
-													results.append(String.format(" Buy: %.2f",thisSign.priceBuy));
-												if (thisSign.canSell)
-													results.append(String.format(" Sell: %.2f",thisSign.priceSell));
-												results.append("\n");
-											}
-											context.getSource().sendFeedback(new LiteralText(String.format("--------------------\nFound %d shops matching query '%s'\n--------------------\n\n%s",setMatches.size(), context.getArgument("itemCode", String.class),results)));
-											return 1;
-										})
-						)
-		);
-
+		HudRenderCallback.EVENT.register(GetShopSigns::displayBoundingBox);
 	}
+	private static long lastCalculationTime = 0;
+	private static boolean lastCalculationExists = false;
+	private static int lastCalculationMinX = 0;
+	private static int lastCalculationMinY = 0;
+	private static int lastCalculationWidth = 0;
+	private static int lastCalculationHeight = 0;
 
-	public Integer CheckDatabaseConnection() {
-		if (serverInfo == null)
-			serverInfo = MinecraftClient.getInstance().getCurrentServerEntry();
-		if (serverInfo != null) {
-			if (serverAddress != serverInfo.address) {
-				serverAddress = serverInfo.address;
-			}
+	private static void displayBoundingBox(MatrixStack matrixStack, float tickDelta) {
+		long currentTime = System.currentTimeMillis();
+		if(lastCalculationExists && currentTime - lastCalculationTime < 1000/45) {
+			drawHollowFill(matrixStack, lastCalculationMinX, lastCalculationMinY,
+					lastCalculationWidth, lastCalculationHeight, 2, 0xffff0000);
+			return;
 		}
-		return UpdateDatabaseConnection();
-	}
-	public Integer UpdateDatabaseConnection() {
-		if ((currentDatabaseName == serverAddress) || (databaseObject == null)) {
-			return 0;
-		}
-		if (databaseObject != null) {
-			//databaseObject.closeConnection();
-		}
-		signs.clear();
-		shopSigns.clear();
-		currentDatabaseFile = String.format("%s/shops.%s.sqlite", CONFIG_PATH, serverAddress);
-		databaseObject = new Db(currentDatabaseFile);
-		databaseObject.open();
-		if (databaseObject.checkConnection()) {
-			// TODO: Load records from database into the signs/shopSigns hashtables
-			currentDatabaseName = serverAddress;
-		}
-		return 1;
-	}
 
-	/**
-	 * Upon game closing, attempt to save our json stores. This means we can be a little lazy with how
-	 * we go about saving throughout the rest of the mod
-	 * @param client the client whose session is ending
-	 */
-	private void gameClosing(MinecraftClient client) {
-		LOGGER.info("gameClosing");
-		Stores.write();
-	}
-	/**
-		Write the shopSigns hashtable to JSON
-	 */
-	public void writeJSON() {
-		Stores.write();
-		ServerInfo serverInfo = MinecraftClient.getInstance().getCurrentServerEntry();
-		String serverAddress = "localhost";
-		if (serverInfo != null)
-			serverAddress = serverInfo.address;
-		String fileJson = String.format("%s/shops.%s.json", CONFIG_PATH, serverAddress);
-		LOGGER.info(String.format("fileJson: %s", fileJson));
-		Gson gson = new GsonBuilder()
-				.setPrettyPrinting()
-				.create();
+		lastCalculationTime = currentTime;
 
-		try {
-			if (new File(CONFIG_PATH).mkdirs()) {
-				LOGGER.info("mkdir");
-			}
-			try (FileWriter writer = new FileWriter(fileJson)) {
-				gson.toJson(shopSigns.values(), writer);
-				writer.flush();
-				LOGGER.info(String.format("Wrote %d signs to %s", shopSigns.size(), fileJson));
-			}
-
-		} catch (IOException | JsonIOException e) {
-			LOGGER.catching(e);
+		MinecraftClient client = MinecraftClient.getInstance();
+		int width = client.getWindow().getScaledWidth();
+		int height = client.getWindow().getScaledHeight();
+		Vec3d cameraDirection = client.cameraEntity.getRotationVec(tickDelta);
+		double fov = client.options.fov;
+		double angleSize = fov/height;
+		Vec3f verticalRotationAxis = new Vec3f(cameraDirection);
+		verticalRotationAxis.cross(Vec3f.POSITIVE_Y);
+		if(!verticalRotationAxis.normalize()) {
+			lastCalculationExists = false;
+			return;
 		}
-	}
 
-	/**
-	 *
-	 * @param location location to scan from
-	 * @param radius how many blocks to scan (does +/- from location in X/Z, Y is always from bedrock to sky limit)
-	 * @return nothing now, the return value ends up being a null list because the logic is handled in-loop
-	 */
-	public static List<Block> getNearbyBlocks(BlockPos location, int radius) {
-		Stores.reload();
-		List<Block> blocks = new ArrayList<Block>();
-		for(int x = location.getX() - radius; x <= location.getX() + radius; x++) {
-			for(int y = 0; y <= 256; y++) {
-				for(int z = location.getZ() - radius; z <= location.getZ() + radius; z++) {
-					BlockEntity blockEntity = MinecraftClient.getInstance().world.getBlockEntity(new BlockPos(x, y, z));
-					if (blockEntity instanceof SignBlockEntity) {
-						addSign((SignBlockEntity) blockEntity);
+		Vec3f horizontalRotationAxis = new Vec3f(cameraDirection);
+		horizontalRotationAxis.cross(verticalRotationAxis);
+		horizontalRotationAxis.normalize();
+
+		verticalRotationAxis = new Vec3f(cameraDirection);
+		verticalRotationAxis.cross(horizontalRotationAxis);
+
+		HitResult hit = client.crosshairTarget;
+
+		if (hit.getType() == HitResult.Type.MISS) {
+			lastCalculationExists = false;
+			return;
+		}
+
+		int minX = width;
+		int maxX = 0;
+		int minY = height;
+		int maxY = 0;
+
+		for(int y = 0; y < height; y +=2) {
+			for(int x = 0; x < width; x+=2) {
+				if(minX < x && x < maxX && minY < y && y < maxY) {
+					continue;
+				}
+
+				Vec3d direction = map(
+						(float) angleSize,
+						cameraDirection,
+						horizontalRotationAxis,
+						verticalRotationAxis,
+						x,
+						y,
+						width,
+						height
+				);
+				HitResult nextHit = raycastInDirection(client, tickDelta, direction);//TODO make less expensive
+
+				if(nextHit == null) {
+					continue;
+				}
+
+				if(nextHit.getType() == HitResult.Type.MISS) {
+					continue;
+				}
+
+				if(nextHit.getType() != hit.getType()) {
+					continue;
+				}
+
+				if (nextHit.getType() == HitResult.Type.BLOCK) {
+					if(!((BlockHitResult) nextHit).getBlockPos().equals(((BlockHitResult) hit).getBlockPos())) {
+						continue;
+					}
+				} else if(nextHit.getType() == HitResult.Type.ENTITY) {
+					if(!((EntityHitResult) nextHit).getEntity().equals(((EntityHitResult) hit).getEntity())) {
+						continue;
 					}
 				}
+
+				if(minX > x) minX = x;
+				if(minY > y) minY = y;
+				if(maxX < x) maxX = x;
+				if(maxY < y) maxY = y;
 			}
 		}
-		return blocks;
-	}
 
-	/**
-	 * Parse a sign block, attempt to create a ShopSign
-	 * @param signBlockEntity the entity to process/check
-	 */
-	public static void parseSign(SignBlockEntity signBlockEntity) {
-		String[] signText = new String[4];
-		for (int i=0; i<4; i++) {
-			StringBuilder lineText = new StringBuilder();
-			signBlockEntity.getTextOnRow(i).visit((part) -> {
-					lineText.append(part);
-					return Optional.empty();
-				});
-			signText[i] = lineText.toString();
-		}
-		ShopSign shopSign = new ShopSign(signBlockEntity.getPos(),signText);
-		if (shopSign.sellerName != "")
-			shopSigns.put(signBlockEntity.getPos().hashCode(), shopSign);
-	}
 
-	/**
-	 * Called whenever a sign entity is created. Not working presently.
-	 * @param sign the entity to process
-	 */
-	public static void addSign(SignBlockEntity sign) {
-		try {
-			if (signs.containsKey(sign.hashCode())) {
+		lastCalculationExists = true;
+		lastCalculationMinX = minX;
+		lastCalculationMinY = minY;
+		lastCalculationWidth = maxX - minX;
+		lastCalculationHeight = maxY - minY;
+
+		drawHollowFill(matrixStack, minX, minY, maxX - minX, maxY - minY, 2, 0xffff0000);
+		if (hit.getType() == HitResult.Type.BLOCK) {
+			BlockPos blockPos = ((BlockHitResult) hit).getBlockPos();
+			BlockState blockState = MinecraftClient.getInstance().world.getBlockState(blockPos);
+			BlockEntity blockEntity = MinecraftClient.getInstance().world.getBlockEntity(blockPos);
+			Block block = blockState.getBlock();
+			if (blockEntity instanceof SignBlockEntity) {
+				try {
+//					Entity entitySign = ((EntityHitResult) hit).getEntity();
+//					TileEntity tileEntity = event.getWorld().getTileEntity(blockPos);
+//        	        		SignTileEntity signTileEntity = (SignTileEntity) tileEntity;
+					StringBuilder signText = new StringBuilder();
+					SignBlockEntity signBlockEntity = (SignBlockEntity) blockEntity;
+					for (int i=0; i<4; i++) {
+						signText.append(signBlockEntity.getTextOnRow(i).asString());
+						signText.append("\n");
+					}
+/*
+					for (Text line : signBlockEntity.texts) {
+						line.visit((part) -> {
+							signText.append(part);
+							return Optional.empty();
+						});
+					}
+*/
+					LOGGER.info(signText);
+
+		        	        client.player.sendMessage(new LiteralText("sign: " + signText.toString()).formatted(Formatting.AQUA), true);
+				}
+				catch (Exception e) {
+					LOGGER.error(e);
+	        	        	client.player.sendMessage(new LiteralText("OOPS! " + e.toString()).formatted(Formatting.AQUA), true);
+				}
 				return;
 			}
-			LOGGER.info("addSign " + sign.hashCode());
-			signs.put(sign.hashCode(), sign);
-			parseSign(sign);
 		}
-		catch (Exception e) {
-			LOGGER.error("OOPS! " + e);
+
+		LiteralText text = new LiteralText("Bounding " + minX + " " + minY + " " + width + " " + height + ": ");
+		client.player.sendMessage(text.append(getLabel(hit)), true);
+	}
+
+	private static void drawHollowFill(MatrixStack matrixStack, int x, int y, int width, int height, int stroke, int color) {
+		matrixStack.push();
+		matrixStack.translate(x-stroke, y-stroke, 0);
+		width += stroke *2;
+		height += stroke *2;
+		DrawableHelper.fill(matrixStack, 0, 0, width, stroke, color);
+		DrawableHelper.fill(matrixStack, width - stroke, 0, width, height, color);
+		DrawableHelper.fill(matrixStack, 0, height - stroke, width, height, color);
+		DrawableHelper.fill(matrixStack, 0, 0, stroke, height, color);
+		matrixStack.pop();
+	}
+
+	private static Text getLabel(HitResult hit) {
+		if(hit == null) return new LiteralText("null");
+
+		switch (hit.getType()) {
+			case BLOCK:
+				return getLabelBlock((BlockHitResult) hit);
+			case ENTITY:
+				return getLabelEntity((EntityHitResult) hit);
+			case MISS:
+			default:
+				return new LiteralText("null");
 		}
 	}
 
-	/**
-	 * Remove a sign from the global list
-	 * @param sign entity to remove
-	 */
-	public static void removeSign(SignBlockEntity sign) {
-		signs.remove(sign);
+	private static Text getLabelEntity(EntityHitResult hit) {
+		return hit.getEntity().getDisplayName();
+	}
+
+	private static Text getLabelBlock(BlockHitResult hit) {
+		BlockPos blockPos = hit.getBlockPos();
+		BlockState blockState = MinecraftClient.getInstance().world.getBlockState(blockPos);
+		Block block = blockState.getBlock();
+		return block.getName();
+	}
+
+	private static Vec3d map(float anglePerPixel, Vec3d center, Vec3f horizontalRotationAxis,
+							 Vec3f verticalRotationAxis, int x, int y, int width, int height) {
+		float horizontalRotation = (x - width/2f) * anglePerPixel;
+		float verticalRotation = (y - height/2f) * anglePerPixel;
+
+		final Vec3f temp2 = new Vec3f(center);
+		temp2.rotate(verticalRotationAxis.getDegreesQuaternion(verticalRotation));
+		temp2.rotate(horizontalRotationAxis.getDegreesQuaternion(horizontalRotation));
+		return new Vec3d(temp2);
+	}
+
+	private static HitResult raycastInDirection(MinecraftClient client, float tickDelta, Vec3d direction) {
+		Entity entity = client.getCameraEntity();
+		if (entity == null || client.world == null) {
+			return null;
+		}
+
+		double reachDistance = 5.0F;
+		HitResult target = raycast(entity, reachDistance, tickDelta, false, direction);
+		boolean tooFar = false;
+		double extendedReach = 6.0D;
+		reachDistance = extendedReach;
+
+		Vec3d cameraPos = entity.getCameraPosVec(tickDelta);
+
+		extendedReach = extendedReach * extendedReach;
+		if (target != null) {
+			extendedReach = target.getPos().squaredDistanceTo(cameraPos);
+		}
+
+		Vec3d vec3d3 = cameraPos.add(direction.multiply(reachDistance));
+		Box box = entity
+				.getBoundingBox()
+				.stretch(entity.getRotationVec(1.0F).multiply(reachDistance))
+				.expand(1.0D, 1.0D, 1.0D);
+		EntityHitResult entityHitResult = ProjectileUtil.raycast(
+				entity,
+				cameraPos,
+				vec3d3,
+				box,
+				(entityx) -> !entityx.isSpectator() && entityx.collides(),
+				extendedReach
+		);
+
+		if (entityHitResult == null) {
+			return target;
+		}
+
+		Entity entity2 = entityHitResult.getEntity();
+		Vec3d hitPos = entityHitResult.getPos();
+		if (cameraPos.squaredDistanceTo(hitPos) < extendedReach || target == null) {
+			target = entityHitResult;
+			if (entity2 instanceof LivingEntity || entity2 instanceof ItemFrameEntity) {
+				client.targetedEntity = entity2;
+			}
+		}
+
+		return target;
+	}
+
+	private static HitResult raycast(
+			Entity entity,
+			double maxDistance,
+			float tickDelta,
+			boolean includeFluids,
+			Vec3d direction
+	) {
+		Vec3d end = entity.getCameraPosVec(tickDelta).add(direction.multiply(maxDistance));
+		return entity.world.raycast(new RaycastContext(
+				entity.getCameraPosVec(tickDelta),
+				end,
+				RaycastContext.ShapeType.OUTLINE,
+				includeFluids ? RaycastContext.FluidHandling.ANY : RaycastContext.FluidHandling.NONE,
+				entity
+		));
 	}
 }
